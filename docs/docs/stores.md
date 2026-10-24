@@ -53,6 +53,39 @@ will not be used for products already linked to it. Either run the command with
 copy the preset's strategy and scraper settings onto the existing store. Do not
 delete a store that has tracked URLs.
 
+## Amazon US (to South Africa)
+
+When delivering to South Africa, amazon.com shows the item price and, separately,
+"Shipping & Import Charges to South Africa" with a **Details** popover. A lower
+item price can come with higher shipping and import charges, so the item price
+alone can show a drop that you don't actually get. This preset tracks the popover's
+**Total** (item, AmazonGlobal shipping and estimated import charges). When a page
+has no fee breakdown, it uses the buy box price instead. An item that can't be
+shipped to South Africa is marked out of stock and no price is recorded.
+
+It requires the browser based API scraper and uses `en_ZA` with South African rand
+(`ZAR`). Amazon shows rand prices only when it sees a South African visitor, so
+the `scraper` service must not use a VPN or proxy outside South Africa. Add it
+with the same South Africa command:
+
+```bash
+docker compose exec app php artisan buddy:create-stores south-africa
+```
+
+This store and the `amazon-us` store from the USA preset share the same domains,
+and the oldest matching store wins, so only keep one of them. A default new
+installation (`DEFAULT_STORES_COUNTRY=all`) creates both, and this one wins
+because `south-africa` is seeded before `usa`. To switch an existing Amazon store
+to the delivered total, set **Price** to type **XPath** with this value and set
+the store's locale to `en_ZA` and currency to `ZAR`:
+
+```text
+(//div[@id="amazonGlobal_feature_div"]//div[contains(@class,"a-popover-preload")]//table[contains(@class,"a-lineitem")]//tr[normalize-space(td[1])="Total"]/td[last()])[1] | (//div[@id="corePrice_feature_div" or @id="corePriceDisplay_desktop_feature_div" or @id="apex_desktop"]//span[contains(concat(" ",normalize-space(@class)," ")," a-price ")]/span[@class="a-offscreen"][normalize-space()!=""])[1][not(//div[@id="amazonGlobal_feature_div"]//div[contains(@class,"a-popover-preload")]//table[contains(@class,"a-lineitem")]//tr[normalize-space(td[1])="Total"])]
+```
+
+Prices already recorded keep their old values, so the first total recorded after
+the switch can look like a price increase.
+
 ## Store name
 
 As you would expect, this is just used for store identification in the UI.
