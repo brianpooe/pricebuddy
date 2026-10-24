@@ -81,4 +81,49 @@ return [
             ],
         ],
     ],
+    [
+        'name' => 'Amazon US (to South Africa)',
+        'slug' => 'amazon-us-za',
+        'domains' => [
+            ['domain' => 'amazon.com'],
+            ['domain' => 'www.amazon.com'],
+        ],
+        'scrape_strategy' => [
+            'title' => [
+                'value' => '#productTitle',
+                'type' => 'selector',
+            ],
+            // Track the "Shipping & Fee Details" total (item, AmazonGlobal shipping and
+            // import charges), so a cheaper item with higher fees is not a price drop.
+            // Falls back to the buy box price when the page has no fee breakdown.
+            'price' => [
+                'value' => '(//div[@id="amazonGlobal_feature_div"]//div[contains(@class,"a-popover-preload")]//table[contains(@class,"a-lineitem")]//tr[normalize-space(td[1])="Total"]/td[last()])[1]'
+                    .' | (//div[@id="corePrice_feature_div" or @id="corePriceDisplay_desktop_feature_div" or @id="apex_desktop"]//span[contains(concat(" ",normalize-space(@class)," ")," a-price ")]/span[@class="a-offscreen"][normalize-space()!=""])[1]'
+                    .'[not(//div[@id="amazonGlobal_feature_div"]//div[contains(@class,"a-popover-preload")]//table[contains(@class,"a-lineitem")]//tr[normalize-space(td[1])="Total"])]',
+                'type' => 'xpath',
+            ],
+            'image' => [
+                'value' => '~"hiRes":"(.+?)"~',
+                'type' => 'regex',
+            ],
+            'availability' => [
+                'value' => '#availability',
+                'type' => 'selector',
+                'match' => [
+                    'out_of_stock' => ['type' => 'regex', 'value' => 'currently unavailable|out of stock|cannot be shipped'],
+                    'pre_order' => ['type' => 'regex', 'value' => 'pre[- ]?order'],
+                    'default' => 'in_stock',
+                ],
+            ],
+        ],
+        'settings' => [
+            'scraper_service' => ScraperService::Api->value,
+            'scraper_service_settings' => "wait-until=domcontentloaded\nsleep=3000",
+            'test_url' => 'https://www.amazon.com/dp/B0GT8XG9Z5',
+            'locale_settings' => [
+                'locale' => 'en_ZA',
+                'currency' => 'ZAR',
+            ],
+        ],
+    ],
 ];
