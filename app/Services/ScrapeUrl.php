@@ -8,6 +8,7 @@ use App\Enums\ScraperService;
 use App\Enums\ScraperStrategyType;
 use App\Enums\StockStatus;
 use App\Models\Store;
+use App\Services\Helpers\CurrencyHelper;
 use App\Services\Helpers\SettingsHelper;
 use App\Settings\AppSettings;
 use Exception;
@@ -58,6 +59,12 @@ class ScrapeUrl
      * than the scraped `availability` value, which a store's match config can override.
      */
     public const string NOT_FOUND_KEY = 'not_found';
+
+    /**
+     * Marks a scrape result whose price was in another currency than the store's,
+     * eg "$551.68" on a ZAR store. Holds the marker that was found.
+     */
+    public const string CURRENCY_MISMATCH_KEY = 'currency_mismatch';
 
     /**
      * Titles that mean "this page does not exist". A bare "404" is deliberately NOT
@@ -169,7 +176,8 @@ class ScrapeUrl
                 $output = [];
             }
 
-            if (! empty($output['title'])) {
+            // A page in the wrong currency is retried, the next response may be right.
+            if (! empty($output['title']) && empty($output[self::CURRENCY_MISMATCH_KEY])) {
                 break;
             }
         }
@@ -184,9 +192,16 @@ class ScrapeUrl
             }
 
             if (empty($output[$required])) {
+                $error = $required === 'price' && filled($output[self::CURRENCY_MISMATCH_KEY] ?? null)
+                    ? __('Price was in :found instead of :expected', [
+                        'found' => $output[self::CURRENCY_MISMATCH_KEY],
+                        'expected' => data_get($output, 'store.currency'),
+                    ])
+                    : __('Missing :field when scraping', ['field' => $required]);
+
                 $this->errorLog('Error scraping URL '.$attempt.' times', [
                     'attempts' => $attempt,
-                    'error' => __('Missing :field when scraping', ['field' => $required]),
+                    'error' => $error,
                     'scrape_errors' => $output['errors'] ?? [],
                     'scraped_html' => $output['body'] ?? '',
                 ]);
@@ -251,6 +266,7 @@ class ScrapeUrl
             $output['body'] = $page->getBody();
             $output['errors'] = $scraper->getErrors();
             $output = $this->applyNotFoundPageGuards($output);
+            $output = $this->applyCurrencyGuard($output, $store);
         } catch (Exception $e) {
             $this->errorLog('Error scraping URL', [
                 'error' => $e->getMessage(),
@@ -278,6 +294,30 @@ class ScrapeUrl
         $output['price'] = null;
         $output['availability'] = 'https://schema.org/Discontinued';
         $output[self::NOT_FOUND_KEY] = true;
+
+        return $output;
+    }
+
+    /**
+     * Drop a price shown in another currency than the store's. The number would
+     * otherwise be stored as if it were in the store currency.
+     */
+    protected function applyCurrencyGuard(array $output, Store $store): array
+    {
+        $price = $output['price'] ?? null;
+
+        if (blank($price)) {
+            return $output;
+        }
+
+        $marker = CurrencyHelper::foreignCurrencyMarker((string) $price, $store->currency, $store->locale);
+
+        if ($marker === null) {
+            return $output;
+        }
+
+        $output['price'] = null;
+        $output[self::CURRENCY_MISMATCH_KEY] = $marker;
 
         return $output;
     }
@@ -323,6 +363,7 @@ class ScrapeUrl
         if ($status === StockStatus::InStock
             && $store instanceof Store
             && $store->missing_price_out_of_stock
+            && blank(data_get($scrapeResult, self::CURRENCY_MISMATCH_KEY))
             && filled(data_get($scrapeResult, 'title'))
             && blank(data_get($scrapeResult, 'price'))) {
             return StockStatus::OutOfStock;

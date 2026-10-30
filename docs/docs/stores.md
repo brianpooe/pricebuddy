@@ -65,8 +65,11 @@ shipped to South Africa is marked out of stock and no price is recorded.
 
 It requires the browser based API scraper and uses `en_ZA` with South African rand
 (`ZAR`). Amazon shows rand prices only when it sees a South African visitor, so
-the `scraper` service must not use a VPN or proxy outside South Africa. Add it
-with the same South Africa command:
+the `scraper` service must not use a VPN or proxy outside South Africa. Even
+then, Amazon sometimes answers in US dollars, so the preset sends the
+`i18n-prefs=ZAR` cookie to ask for rand. A price shown in another currency than
+the store's, such as `$551.68` on this `ZAR` store, is retried and never recorded
+as rand. Add it with the same South Africa command:
 
 ```bash
 docker compose exec app php artisan buddy:create-stores south-africa
@@ -76,8 +79,9 @@ This store and the `amazon-us` store from the USA preset share the same domains,
 and the oldest matching store wins, so only keep one of them. A default new
 installation (`DEFAULT_STORES_COUNTRY=all`) creates both, and this one wins
 because `south-africa` is seeded before `usa`. To switch an existing Amazon store
-to the delivered total, set **Price** to type **XPath** with this value and set
-the store's locale to `en_ZA` and currency to `ZAR`:
+to the delivered total, set **Price** to type **XPath** with this value, set
+the store's locale to `en_ZA` and currency to `ZAR`, and set **Cookies** to
+`i18n-prefs=ZAR`:
 
 ```text
 (//div[@id="amazonGlobal_feature_div"]//div[contains(@class,"a-popover-preload")]//table[contains(@class,"a-lineitem")]//tr[normalize-space(td[1])="Total"]/td[last()])[1] | (//div[@id="corePrice_feature_div" or @id="corePriceDisplay_desktop_feature_div" or @id="apex_desktop"]//span[contains(concat(" ",normalize-space(@class)," ")," a-price ")]/span[@class="a-offscreen"][normalize-space()!=""])[1][not(//div[@id="amazonGlobal_feature_div"]//div[contains(@class,"a-popover-preload")]//table[contains(@class,"a-lineitem")]//tr[normalize-space(td[1])="Total"])]

@@ -204,6 +204,34 @@ class CurrencyHelperTest extends TestCase
         $this->assertCurrencyToFloat($assertions, 'EUR');
     }
 
+    public function test_foreign_currency_marker_finds_another_currency(): void
+    {
+        $this->assertSame('$', CurrencyHelper::foreignCurrencyMarker('$551.68', 'ZAR', 'en'));
+        $this->assertSame('$', CurrencyHelper::foreignCurrencyMarker(' $538.61 ', 'ZAR', 'en_ZA'));
+        $this->assertSame('USD', CurrencyHelper::foreignCurrencyMarker('USD 551.68', 'ZAR', 'en'));
+        $this->assertSame('€', CurrencyHelper::foreignCurrencyMarker('€ 19,99', 'GBP', 'en_GB'));
+        $this->assertSame('R', CurrencyHelper::foreignCurrencyMarker('R 1,299.00', 'USD', 'en_US'));
+    }
+
+    public function test_foreign_currency_marker_accepts_the_expected_currency(): void
+    {
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker("ZAR\u{a0}9,206.27", 'ZAR', 'en'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('ZAR7,291.47', 'ZAR', 'en_ZA'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('R 14,999', 'ZAR', 'en_ZA'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('R1 299,00', 'ZAR', 'en'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('$49.95', 'AUD', 'en_AU'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('$49.95', 'AUD', 'en'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('$49.95', 'USD', 'en_US'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('19,99 €', 'EUR', 'fr_FR'));
+    }
+
+    public function test_foreign_currency_marker_ignores_words_and_bare_numbers(): void
+    {
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('1,299.00', 'ZAR', 'en_ZA'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('Now R 199 each', 'ZAR', 'en_ZA'));
+        $this->assertNull(CurrencyHelper::foreignCurrencyMarker('From 19.99', 'GBP', 'en_GB'));
+    }
+
     public function test_to_string_formats_float_value()
     {
         $this->assertEquals('$10.50', CurrencyHelper::toString(10.5));
