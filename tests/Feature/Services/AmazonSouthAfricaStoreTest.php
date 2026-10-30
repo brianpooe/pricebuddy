@@ -101,6 +101,56 @@ class AmazonSouthAfricaStoreTest extends TestCase
         $this->assertSame(8941.05, (float) $price->price);
     }
 
+    public function test_preset_asks_amazon_for_rand_prices(): void
+    {
+        $this->fakeBrowserResponse(file_get_contents(base_path('tests/Fixtures/Amazon/product-with-fees.html')));
+
+        ScrapeUrl::new($this->store->test_url)->scrape();
+
+        Http::assertSent(fn (Request $request): bool => $request['extra-http-headers'] === 'Cookie:i18n-prefs=ZAR');
+    }
+
+    public function test_page_in_usd_is_retried_and_its_price_is_not_read_as_rand(): void
+    {
+        $this->fakeBrowserResponse(file_get_contents(base_path('tests/Fixtures/Amazon/product-in-usd.html')));
+
+        $result = ScrapeUrl::new($this->store->test_url)->setSendUiNotifications(false)->scrape();
+
+        $this->assertNull($result['price']);
+        $this->assertSame('$', $result[ScrapeUrl::CURRENCY_MISMATCH_KEY]);
+        $this->assertSame(StockStatus::InStock, ScrapeUrl::resolveStockStatus($result, $this->store->scrape_strategy->availability));
+        Http::assertSentCount(3);
+    }
+
+    public function test_retry_uses_the_rand_page_when_amazon_answers_in_usd_first(): void
+    {
+        Http::fake([
+            'http://scraper:3000/api/article*' => Http::sequence()
+                ->push(['fullContent' => file_get_contents(base_path('tests/Fixtures/Amazon/product-in-usd.html'))])
+                ->push(['fullContent' => file_get_contents(base_path('tests/Fixtures/Amazon/product-with-fees.html'))]),
+        ]);
+
+        $result = ScrapeUrl::new($this->store->test_url)->scrape();
+
+        $this->assertSame("ZAR\u{a0}8,941.05", $result['price']);
+        $this->assertArrayNotHasKey(ScrapeUrl::CURRENCY_MISMATCH_KEY, $result);
+        Http::assertSentCount(2);
+    }
+
+    public function test_usd_price_is_not_recorded(): void
+    {
+        $this->fakeBrowserResponse(file_get_contents(base_path('tests/Fixtures/Amazon/product-in-usd.html')));
+        $url = Url::factory()->createOne([
+            'url' => $this->store->test_url,
+            'product_id' => Product::factory()->create()->id,
+            'store_id' => $this->store->id,
+        ]);
+        $url->prices()->delete();
+
+        $this->assertNull($url->updatePrice());
+        $this->assertSame(0, $url->prices()->count());
+    }
+
     protected function fakeBrowserResponse(string $html): void
     {
         Http::fake([
