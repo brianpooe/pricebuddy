@@ -142,6 +142,91 @@ class CurrencyHelper
         return (float) (($integer === '' ? '0' : $integer).'.'.($fraction === '' ? '0' : $fraction));
     }
 
+    /**
+     * Find a currency marker in a scraped price that belongs to another currency, eg
+     * the "$" in "$551.68" on a ZAR store. Amazon sometimes serves a page in USD, and
+     * toFloat() would read it as rand. Returns null when the price has no marker or
+     * only markers of the expected currency.
+     */
+    public static function foreignCurrencyMarker(string $price, ?string $iso = null, ?string $locale = null): ?string
+    {
+        $iso = strtoupper($iso ?? self::getCurrency());
+        $ownMarkers = self::markersFor($iso, $locale ?? self::getLocale());
+        $knownMarkers = self::knownMarkers();
+
+        preg_match_all('/[\p{L}\p{Sc}]+/u', $price, $matches);
+
+        foreach ($matches[0] as $token) {
+            if (in_array($token, $ownMarkers, true) || ! isset($knownMarkers[$token])) {
+                continue;
+            }
+
+            if (! in_array($iso, $knownMarkers[$token], true)) {
+                return $token;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Every way a price can show this currency: its ISO code, the symbol in the store
+     * locale and in English, and the symbols in the currency dataset.
+     *
+     * @return array<int, string>
+     */
+    protected static function markersFor(string $iso, string $locale): array
+    {
+        $markers = [$iso];
+
+        foreach ([$locale, 'en'] as $displayLocale) {
+            try {
+                $markers[] = Currencies::getSymbol($iso, $displayLocale);
+            } catch (Exception $e) {
+                // Unknown currency or locale, the dataset symbols below still apply.
+            }
+        }
+
+        return array_values(array_unique(array_merge(
+            $markers,
+            self::getAllCurrencies()->where('iso', $iso)->pluck('symbol')->filter()->all(),
+        )));
+    }
+
+    /**
+     * Map of currency marker to the ISO codes it can stand for, eg "$" => USD, AUD...
+     *
+     * @return array<string, array<int, string>>
+     */
+    protected static function knownMarkers(): array
+    {
+        return once(function (): array {
+            $markers = [];
+
+            foreach (self::getAllCurrencies() as $currency) {
+                $iso = strtoupper((string) $currency['iso']);
+
+                if ($iso === '') {
+                    continue;
+                }
+
+                $symbols = [$iso, (string) $currency['symbol']];
+
+                try {
+                    $symbols[] = Currencies::getSymbol($iso, 'en');
+                } catch (Exception $e) {
+                    // Not in the intl data, keep the dataset symbol only.
+                }
+
+                foreach (array_filter($symbols) as $symbol) {
+                    $markers[$symbol][] = $iso;
+                }
+            }
+
+            return array_map(fn (array $isos): array => array_values(array_unique($isos)), $markers);
+        });
+    }
+
     public static function toString(mixed $value, int $maxPrecision = 2, ?string $locale = null, ?string $iso = null): string
     {
         return Number::currency(

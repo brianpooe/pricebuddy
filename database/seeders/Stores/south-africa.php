@@ -116,6 +116,8 @@ return [
                 ],
             ],
         ],
+        // Without a currency preference Amazon sometimes answers in USD.
+        'cookies' => 'i18n-prefs=ZAR',
         'settings' => [
             'scraper_service' => ScraperService::Api->value,
             'scraper_service_settings' => "wait-until=domcontentloaded\nsleep=3000",

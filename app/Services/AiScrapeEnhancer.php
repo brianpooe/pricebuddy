@@ -30,7 +30,9 @@ class AiScrapeEnhancer
     {
         // Only fill a genuine gap. The scraped price is a raw string here, so filled()
         // treats null/'' as a gap and any non-empty value as already-present.
-        if (filled(data_get($scrapeResult, 'price'))) {
+        // A price in the wrong currency is not a gap to fill, AI would read the same page.
+        if (filled(data_get($scrapeResult, 'price'))
+            || filled(data_get($scrapeResult, ScrapeUrl::CURRENCY_MISMATCH_KEY))) {
             return $scrapeResult;
         }
 

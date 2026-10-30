@@ -109,7 +109,9 @@ class MetaExtractionService
             return HealingReason::Disabled;
         }
 
-        if (filled(data_get($rawScrapeResult, 'price'))) {
+        // A price in the wrong currency means the selector works, the page does not.
+        if (filled(data_get($rawScrapeResult, 'price'))
+            || filled(data_get($rawScrapeResult, ScrapeUrl::CURRENCY_MISMATCH_KEY))) {
             return HealingReason::NotNeeded;
         }
 
